@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Process Breakdown Agent</title>
+    <style>
+      :root { --bg:#eef2f5; --card:#fff; --line:#e5e7eb; --accent:#16a34a; }
+      body { margin:0; background:var(--bg); font-family: system-ui, -apple-system, Segoe UI, Meiryo, sans-serif; }
+      header { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; background:#1f2937; color:#fff; }
+      header h1 { font-size:18px; margin:0; }
+      .container { max-width: 1100px; margin: 18px auto; padding: 0 16px; }
+      .grid { display:grid; grid-template-columns: 0.35fr 0.65fr; gap: 16px; }
+      .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+      h2 { font-size:18px; margin:0 0 10px; }
+      h3 { font-size:16px; margin:10px 0; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { border:1px solid var(--line); padding:8px; text-align:left; }
+      .flow { display:flex; flex-direction:column; align-items:center; gap:12px; padding:12px 0; }
+      .flow .node { padding:8px 16px; border-radius:10px; border:1px solid var(--line); background:#f9fafb; }
+      .flow .start, .flow .end { background:#e8f7ee; border-color:#86efac; color:#065f46; font-weight:600; }
+      .arrow { width:2px; height:16px; background:#cbd5e1; }
+      .btn { display:inline-block; padding:10px 16px; border-radius:8px; background:var(--accent); color:#fff; border:0; cursor:pointer; text-decoration:none; }
+      .btn:disabled { opacity:.6; cursor:not-allowed; }
+      .row-actions { color:#6b7280; cursor:pointer; }
+      .summary dt { color:#6b7280; font-size:12px; }
+      .summary dd { margin:0 0 8px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Process Breakdown Agent</h1>
+      <div style="width:32px;height:32px;border-radius:50%;background:#9ca3af"></div>
+    </header>
+    <div class="container">
+      <div class="grid">
+        <div class="panel">
+          <h2>Summary</h2>
+          <dl class="summary">
+            <dt>Material</dt><dd>{{ features.material or 'N/A' }}</dd>
+            <dt>Dimensions</dt><dd>{{ features.dims_text or 'N/A' }}</dd>
+          </dl>
+          <h3>Auto-Generated Machining Steps</h3>
+          <table>
+            <thead><tr><th>Step</th><th>Operation</th></tr></thead>
+            <tbody>
+              {% for s in steps %}
+              <tr><td>{{ loop.index }}</td><td>{{ s.name }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <h2>Process Flow</h2>
+          <div class="flow">
+            <div class="node start">Start</div>
+            {% for s in steps %}
+              <div class="arrow"></div>
+              <div class="node">{{ s.name }}</div>
+            {% endfor %}
+            <div class="arrow"></div>
+            <div class="node end">End</div>
+          </div>
+
+          <table>
+            <thead><tr><th>Operation</th><th>Description</th><th>Machine</th><th></th></tr></thead>
+            <tbody id="rows">
+              {% for s in steps %}
+              <tr>
+                <td><input value="{{ s.name }}" /></td>
+                <td><input value="{{ s.tolerance or '' }}" placeholder="Description / tol." /></td>
+                <td><input value="{{ s.machine }}" /></td>
+                <td class="row-actions" onclick="editRow(this)">✎</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+            <a class="btn" href="/match/ui" style="background:#0ea5e9">Go to Company Matching</a>
+            <a class="btn" href="#" onclick="goBack('/')" style="background:#6b7280">Back</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+  function goBack(fallback){
+    try{
+      if (window.history.length > 1){ window.history.back(); return; }
+    }catch(e){}
+    window.location.href = fallback || '/';
+  }
+      function editRow(td){
+        // 既にinputで編集可能なので何もしないダミー
+      }
+      // 保存・復元: 工程テーブルの入力値
+      const STORAGE_KEY = 'cma:process:rows';
+      function getRows(){
+        return Array.from(document.querySelectorAll('#rows tr')).map(tr => {
+          const [opEl, descEl, macEl] = tr.querySelectorAll('input');
+          return { name: opEl.value, tolerance: descEl.value || '', machine: macEl.value };
+        });
+      }
+      function setRows(data){
+        const trs = Array.from(document.querySelectorAll('#rows tr'));
+        for (let i=0; i<trs.length && i<data.length; i++){
+          const [opEl, descEl, macEl] = trs[i].querySelectorAll('input');
+          if (opEl) opEl.value = data[i].name || opEl.value;
+          if (descEl) descEl.value = data[i].tolerance || '';
+          if (macEl) macEl.value = data[i].machine || macEl.value;
+        }
+        // フローノードのラベルも更新
+        const nodes = Array.from(document.querySelectorAll('.flow .node'));
+        // nodes: [Start, step1, step2, ..., End]
+        let idx = 0;
+        for (let i=0; i<nodes.length; i++){
+          const el = nodes[i];
+          if (el.classList.contains('start') || el.classList.contains('end')) continue;
+          if (idx < data.length && data[idx].name){ el.textContent = data[idx].name; }
+          idx++;
+        }
+      }
+      function saveRows(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(getRows())); }catch(e){} }
+      // 入力イベントで保存
+      document.querySelectorAll('#rows input').forEach(inp => inp.addEventListener('input', saveRows));
+      // 初期復元
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw){ const data = JSON.parse(raw); if (Array.isArray(data) && data.length){ setRows(data); } }
+      }catch(e){}
+      // ページ離脱前に保存
+      window.addEventListener('beforeunload', saveRows);
+  // 直接レポートへ遷移しないよう、送信ボタンは廃止（③で生成操作を行う）
+    </script>
+  </body>
+  </html>

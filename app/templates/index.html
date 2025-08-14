@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Cyber Manufacturing Alliance</title>
+    <style>
+      :root { --bg:#f7f9fc; --card:#fff; --line:#e5e7eb; --accent:#4f46e5; }
+      * { box-sizing: border-box; }
+      body { background:var(--bg); font-family: system-ui, -apple-system, Segoe UI, Meiryo, sans-serif; margin: 0; }
+      header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:#fff; border-bottom:1px solid var(--line); }
+      header h1 { font-size:18px; margin:0; display:flex; align-items:center; gap:10px; }
+      .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+      .grid { display:grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
+      .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+      h2 { font-size:20px; margin:0 0 12px; }
+      .upload-box { border:2px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:#6b7280; }
+      .btn { display:inline-block; padding:10px 16px; border-radius:8px; background:var(--accent); color:#fff; border:0; cursor:pointer; text-decoration:none; }
+      .btn:disabled { opacity:.6; cursor:not-allowed; }
+      .preview { border:1px solid var(--line); border-radius:8px; padding:8px; min-height:220px; display:flex; align-items:center; justify-content:center; background:#fff; }
+      .field { margin-bottom:12px; }
+      .field label { display:block; font-size:12px; color:#6b7280; margin-bottom:4px; }
+      .field input, .field textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+      .side-actions { display:flex; gap:8px; }
+      .error { color:#b30000; margin-top:8px; }
+      img.preview-img { max-width:100%; height:auto; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Cyber Manufacturing Alliance</h1>
+      <div style="width:36px;height:36px;border-radius:50%;background:#e5e7eb"></div>
+    </header>
+    <div class="container">
+      <div class="grid">
+        <div class="panel">
+          <h2>Diagram Analysis Agent</h2>
+          <div class="upload-box">
+            <p>PDF, CAD, image</p>
+            <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.dxf,.dwg" style="display:none" />
+            <button class="btn" onclick="document.getElementById('file').click()">Upload File</button>
+            <div id="upload-msg" class="error"></div>
+          </div>
+          <h3>Preview</h3>
+          <div class="preview" id="preview">
+            <span style="color:#9ca3af">No preview</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Extracted Features</h2>
+          <div class="field">
+            <label>Material</label>
+            <input id="material" placeholder="e.g., SUS316" />
+          </div>
+          <div class="field">
+            <label>Dimensions</label>
+            <input id="dimensions" placeholder="e.g., 100 x 120 x 40 mm" />
+          </div>
+          <div class="field">
+            <label>Annotations</label>
+            <input id="annotations" placeholder="e.g., HOLE" />
+          </div>
+          <div class="side-actions">
+            <button id="sendBtn" class="btn" disabled>Send to Process Breakdown</button>
+            <a class="btn" href="#" onclick="resetAll()" style="background:#6b7280">Reset</a>
+          </div>
+          {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+    <script>
+      function goBack(fallback){ try{ if (window.history.length > 1){ window.history.back(); } else { window.location.href = fallback || '/'; } } catch(e){ window.location.href = fallback || '/'; } }
+      function resetAll(){
+        try{ localStorage.removeItem('cma:index:last'); localStorage.removeItem('cma:process:rows'); }catch(e){}
+        window.location.href = '/';
+      }
+      const fileInput = document.getElementById('file');
+      const preview = document.getElementById('preview');
+      const sendBtn = document.getElementById('sendBtn');
+      const uploadMsg = document.getElementById('upload-msg');
+      const material = document.getElementById('material');
+      const dimensions = document.getElementById('dimensions');
+      const annotations = document.getElementById('annotations');
+      let lastFilename = null;
+      // 保存/復元（入力値）
+      try{
+        const saved = JSON.parse(localStorage.getItem('cma:index:last')||'null');
+        if (saved){
+          material.value = saved.material || '';
+          dimensions.value = saved.dimensions || '';
+          annotations.value = saved.annotations || '';
+          if (saved.preview_url){
+            preview.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = saved.preview_url; img.className='preview-img';
+            preview.appendChild(img);
+          }
+          if (saved.filename){ lastFilename = saved.filename; sendBtn.disabled = false; }
+        }
+      }catch(e){}
+      function saveIndex(){
+        try{
+          const obj = { filename: lastFilename, material: material.value, dimensions: dimensions.value, annotations: annotations.value };
+          const img = document.querySelector('#preview img');
+          if (img) obj.preview_url = img.src;
+          localStorage.setItem('cma:index:last', JSON.stringify(obj));
+        }catch(e){}
+      }
+      material.addEventListener('input', saveIndex);
+      dimensions.addEventListener('input', saveIndex);
+      annotations.addEventListener('input', saveIndex);
+
+      fileInput.addEventListener('change', async (e) => {
+        if (!fileInput.files.length) return;
+        const form = new FormData();
+        form.append('file', fileInput.files[0]);
+        uploadMsg.textContent = '';
+        sendBtn.disabled = true;
+        try {
+          const res = await fetch('/analyze', { method: 'POST', body: form });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || '解析エラー');
+          lastFilename = data.filename;
+          // フィールドへ反映
+          material.value = data.material || '';
+          dimensions.value = data.dims_text || '';
+          annotations.value = (data.notes && data.notes.slice(0,120)) || '';
+          // プレビュー
+          preview.innerHTML = '';
+          if (data.preview_url) {
+            const img = document.createElement('img');
+            img.src = data.preview_url;
+            img.className = 'preview-img';
+            preview.appendChild(img);
+          } else {
+            preview.innerHTML = '<span style="color:#9ca3af">No preview (non-image)</span>';
+          }
+          sendBtn.disabled = false;
+          saveIndex();
+        } catch (err) {
+          uploadMsg.textContent = err.message;
+        }
+      });
+
+      sendBtn.addEventListener('click', async () => {
+        sendBtn.disabled = true;
+        const payload = {
+          filename: lastFilename,
+          material: material.value || undefined,
+          dimensions: dimensions.value || undefined,
+          annotations: annotations.value || undefined,
+        };
+        const res = await fetch('/process/ui', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.redirected) {
+          window.location.href = res.url; return;
+        }
+  saveIndex();
+  const html = await res.text();
+        // 遷移（工程分解UIテンプレート）
+        document.open(); document.write(html); document.close();
+      });
+    </script>
+  </body>
+</html>

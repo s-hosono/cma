@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Companies</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Meiryo, sans-serif; margin: 0; background:#f7f9fc; }
+      .container { max-width:1100px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+      h1 { font-size:20px; margin:4px 0 12px; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { border-bottom:1px solid #e5e7eb; padding:8px; text-align:left; font-size:14px; }
+      a.btn { display:inline-block; padding:8px 12px; background:#2563eb; color:#fff; border-radius:8px; text-decoration:none; }
+      .tabs { display:flex; gap:16px; margin-bottom:12px; }
+      .tab { color:#6b7280; text-decoration:none; padding:6px 2px; border-bottom:2px solid transparent; }
+      .tab.active { color:#1d4ed8; border-color:#1d4ed8; font-weight:600; }
+    </style>
+  </head>
+  <body>
+  <div class="container" id="auth" data-is-admin="{{ '1' if is_admin else '0' }}">
+      <div class="tabs" style="justify-content:space-between; align-items:center;">
+        <a class="tab" href="/match/ui">Tasks</a>
+        <a class="tab active" href="/companies">Companies</a>
+        <a class="tab" href="/assignments">Assignments</a>
+        <a class="tab" href="/reports">Reports</a>
+        <span style="margin-left:auto;"><a class="tab" href="{{ '/logout' if is_admin else '/login' }}">{{ 'Logout' if is_admin else 'Login' }}</a></span>
+      </div>
+      <h1 style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Companies</span>
+        <span style="display:flex; align-items:center; gap:8px;">
+          <label style="font-size:13px;color:#6b7280; display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="adminToggle" {{ 'checked' if is_admin else '' }} /> Admin Edit
+          </label>
+          <a class="btn" id="addBtn" href="#" onclick="openCreate()" style="display:none;">Add Company</a>
+        </span>
+      </h1>
+  <div id="createForm" style="display:none; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px;">
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+          <div><div style="font-size:12px;color:#6b7280;">Name</div><input id="c_name" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:8px;" /></div>
+          <div><div style="font-size:12px;color:#6b7280;">Equipment</div><input id="c_machines" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:8px;" /></div>
+          <div><div style="font-size:12px;color:#6b7280;">Skills</div><input id="c_skills" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:8px;" /></div>
+          <div><div style="font-size:12px;color:#6b7280;">Capacity</div><input id="c_capacity" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:8px;" /></div>
+          <div><div style="font-size:12px;color:#6b7280;">Location</div><input id="c_location" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:8px;" /></div>
+          <div style="grid-column: 1 / -1;"><div style="font-size:12px;color:#6b7280;">Notes</div><input id="c_notes" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:8px;" /></div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
+          <a class="btn" href="#" onclick="submitCreate()">Create</a>
+          <a class="btn" href="#" onclick="closeCreate()" style="background:#6b7280;">Cancel</a>
+        </div>
+      </div>
+      <table id="companiesTable">
+        <thead>
+          <tr><th>Name</th><th>Equipment</th><th>Capacity</th><th>Location</th><th>Skills</th><th>Notes</th><th style="width:120px;">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for c in companies %}
+            <tr data-id="{{ c.id }}">
+              <td data-k="name">{{ c.name }}</td>
+              <td data-k="machines">{{ c.machines }}</td>
+              <td data-k="capacity">{{ c.capacity or '-' }}</td>
+              <td data-k="location">{{ c.location or '-' }}</td>
+              <td data-k="skills">{{ c.skills }}</td>
+              <td data-k="notes">{{ c.notes }}</td>
+              <td>
+                <a class="btn" href="#" onclick="editRow(this)" style="display:none;">Edit</a>
+                <a class="btn" href="#" onclick="deleteRow(this)" style="display:none; background:#b91c1c;">Delete</a>
+                <a class="btn" href="#" onclick="saveRow(this)" style="display:none; background:#16a34a;">Save</a>
+                <a class="btn" href="#" onclick="cancelEdit(this)" style="display:none; background:#6b7280;">Cancel</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <a class="btn" href="/match/ui">Go to Company Matching</a>
+        <a class="btn" href="#" onclick="goBack('/match/ui')" style="background:#6b7280">Back</a>
+      </div>
+    </div>
+    <script>
+      function goBack(fallback){ try{ if (window.history.length > 1){ window.history.back(); } else { window.location.href = fallback || '/'; } } catch(e){ window.location.href = fallback || '/'; } }
+      const table = document.getElementById('companiesTable');
+      const adminToggle = document.getElementById('adminToggle');
+  const addBtn = document.getElementById('addBtn');
+  const IS_ADMIN = (document.getElementById('auth')?.dataset?.isAdmin === '1');
+      function setAdminMode(on){
+        table.querySelectorAll('tbody tr').forEach(tr => {
+          const btns = tr.querySelectorAll('td:last-child a');
+          btns.forEach(b => b.style.display = on ? 'inline-block' : 'none');
+        });
+        addBtn.style.display = on ? 'inline-block' : 'none';
+        document.getElementById('createForm').style.display = on ? 'block' : 'none';
+      }
+      adminToggle.addEventListener('change', e => {
+        if (!IS_ADMIN){
+          // 未ログインならログインページへ
+          window.location.href = '/login?next=' + encodeURIComponent(window.location.href);
+          adminToggle.checked = false; return;
+        }
+        setAdminMode(e.target.checked);
+      });
+      // 初期化
+      if (IS_ADMIN) {
+        setAdminMode(adminToggle.checked);
+      }
+      function openCreate(){ document.getElementById('createForm').style.display = 'block'; }
+      function closeCreate(){ document.getElementById('createForm').style.display = 'none'; }
+      async function submitCreate(){
+        const payload = {
+          name: document.getElementById('c_name').value,
+          machines: document.getElementById('c_machines').value,
+          skills: document.getElementById('c_skills').value,
+          notes: document.getElementById('c_notes').value,
+          capacity: document.getElementById('c_capacity').value,
+          location: document.getElementById('c_location').value,
+        };
+        const res = await fetch('/api/companies', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        const j = await res.json();
+        if (!j.ok){ alert(j.error || 'Create failed'); return; }
+        // append row
+        const c = j.company;
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-id', c.id);
+        tr.innerHTML = `
+          <td data-k="name">${c.name}</td>
+          <td data-k="machines">${c.machines}</td>
+          <td data-k="capacity">${c.capacity||'-'}</td>
+          <td data-k="location">${c.location||'-'}</td>
+          <td data-k="skills">${c.skills}</td>
+          <td data-k="notes">${c.notes}</td>
+          <td>
+            <a class="btn" href="#" onclick="editRow(this)" style="display:${adminToggle.checked?'inline-block':'none'};">Edit</a>
+            <a class="btn" href="#" onclick="deleteRow(this)" style="display:${adminToggle.checked?'inline-block':'none'}; background:#b91c1c;">Delete</a>
+            <a class="btn" href="#" onclick="saveRow(this)" style="display:none; background:#16a34a;">Save</a>
+            <a class="btn" href="#" onclick="cancelEdit(this)" style="display:none; background:#6b7280;">Cancel</a>
+          </td>`;
+        table.querySelector('tbody').prepend(tr);
+        closeCreate();
+      }
+      function editRow(a){
+        const tr = a.closest('tr');
+        // 既存表示→入力に変換
+        tr.querySelectorAll('td[data-k]').forEach(td => {
+          const k = td.getAttribute('data-k');
+          const v = td.textContent === '-' ? '' : td.textContent;
+          td.innerHTML = `<input data-k="${k}" value="${v.replace(/"/g,'&quot;')}" style="width:100%; padding:6px; border:1px solid #e5e7eb; border-radius:6px;"/>`;
+        });
+        toggleRowButtons(tr, 'edit');
+      }
+      function cancelEdit(a){
+        const tr = a.closest('tr');
+        // 入力を元のテキストに戻す（保存しない）
+        tr.querySelectorAll('input[data-k]').forEach(inp => {
+          const k = inp.getAttribute('data-k');
+          const td = inp.closest('td');
+          td.textContent = inp.value || '-';
+        });
+        toggleRowButtons(tr, 'view');
+      }
+      async function saveRow(a){
+        const tr = a.closest('tr');
+        const id = Number(tr.getAttribute('data-id'));
+        const payload = {};
+        tr.querySelectorAll('input[data-k]').forEach(inp => { payload[inp.getAttribute('data-k')] = inp.value; });
+        const res = await fetch(`/api/companies/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        const j = await res.json();
+        if (!j.ok){ alert('Update failed'); return; }
+        const c = j.company;
+        // 反映
+        tr.querySelectorAll('td[data-k]').forEach(td => {
+          const k = td.getAttribute('data-k');
+          td.textContent = (c[k] || '-')
+        });
+        toggleRowButtons(tr, 'view');
+      }
+      async function deleteRow(a){
+        const tr = a.closest('tr');
+        const id = Number(tr.getAttribute('data-id'));
+        if (!confirm('Delete this company?')) return;
+        const res = await fetch(`/api/companies/${id}`, { method:'DELETE' });
+        const j = await res.json();
+        if (!j.ok){ alert('Delete failed'); return; }
+        tr.remove();
+      }
+      function toggleRowButtons(tr, mode){
+        const [editBtn, delBtn, saveBtn, cancelBtn] = tr.querySelectorAll('td:last-child a');
+        if (mode==='edit'){
+          editBtn.style.display = 'none';
+          delBtn.style.display = 'none';
+          saveBtn.style.display = 'inline-block';
+          cancelBtn.style.display = 'inline-block';
+        } else {
+          editBtn.style.display = adminToggle.checked ? 'inline-block' : 'none';
+          delBtn.style.display = adminToggle.checked ? 'inline-block' : 'none';
+          saveBtn.style.display = 'none';
+          cancelBtn.style.display = 'none';
+        }
+      }
+    </script>
+  </body>
+ </html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Reports</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Meiryo, sans-serif; margin: 0; background:#f7f9fc; }
+      .container { max-width:900px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+      h1 { font-size:20px; margin:4px 0 12px; }
+      .row { border:1px solid #e5e7eb; border-radius:12px; padding:14px; }
+      .muted { color:#6b7280; font-size:12px; }
+      a.btn { display:inline-block; padding:8px 12px; background:#2563eb; color:#fff; border-radius:8px; text-decoration:none; }
+      .tabs { display:flex; gap:16px; margin-bottom:12px; }
+      .tab { color:#6b7280; text-decoration:none; padding:6px 2px; border-bottom:2px solid transparent; }
+      .tab.active { color:#1d4ed8; border-color:#1d4ed8; font-weight:600; }
+      .actions { display:flex; gap:8px; align-items:center; }
+      select { padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; }
+      table { width:100%; border-collapse: collapse; }
+      th, td { border-bottom:1px solid #e5e7eb; padding:8px; text-align:left; font-size:14px; }
+    </style>
+    <script>
+      function onFileChange(sel){
+        const file = sel.value;
+        const url = new URL(window.location.href);
+        if (file) url.searchParams.set('file', file); else url.searchParams.delete('file');
+        window.location.href = url.toString();
+      }
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="tabs">
+        <a class="tab" href="/match/ui">Tasks</a>
+        <a class="tab" href="/companies">Companies</a>
+        <a class="tab" href="/assignments">Assignments</a>
+        <a class="tab active" href="/reports">Reports</a>
+      </div>
+      <h1>④ Report Generation Agent</h1>
+      <div class="actions" style="margin-bottom:12px;">
+        <label for="fileSel" class="muted">図面を選択:</label>
+        <select id="fileSel" onchange="onFileChange(this)">
+          <option value="">(未選択)</option>
+          {% for f in files %}
+            <option value="{{ f }}" {% if selected_file==f %}selected{% endif %}>{{ f }}</option>
+          {% endfor %}
+        </select>
+        {% if report and selected_file == report.filename %}
+          <a class="btn" href="{{ url_for('download_docx') }}?file={{ selected_file|urlencode }}">Export Word</a>
+        {% endif %}
+        <a class="btn" href="#" onclick="goBack('/match/ui');return false;" style="background:#6b7280">Back</a>
+      </div>
+
+      {% if report %}
+      <div class="row" style="margin-bottom:12px;">
+        <div style="font-weight:600; margin-bottom:6px;">Summary</div>
+        <div class="muted">File: {{ report.filename }} / Material: {{ report.material or '-' }} / Part: {{ report.part_type or '-' }} / Steps: {{ report.steps_count }}</div>
+        {% if report.top_matches %}
+        <div class="muted">Top Matches:
+          {% for t in report.top_matches %}
+            <span>{{ t.name }} ({{ '%.2f' % t.score }})</span>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+        <div class="muted" style="margin-bottom:12px;">メタ情報は最新の解析結果に対してのみ表示されます。</div>
+      {% endif %}
+
+      <div class="row">
+        <div style="font-weight:600; margin-bottom:6px;">Assignments for Selected Drawing</div>
+        {% if selected_file %}
+          {% if items and items|length > 0 %}
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Task</th><th>Company</th><th>Created</th></tr>
+            </thead>
+            <tbody>
+              {% for it in items %}
+              <tr>
+                <td>{{ it.id }}</td>
+                <td>{{ it.task_name }}</td>
+                <td>{{ it.company_name }}</td>
+                <td>{{ it.created_at }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+            <div>この図面の割り当てはまだありません。</div>
+          {% endif %}
+        {% else %}
+          <div>上のプルダウンから図面を選択してください。</div>
+        {% endif %}
+      </div>
+    </div>
+    <script>
+      function goBack(fallback){
+        try{
+          if (window.history.length > 1){ window.history.back(); return; }
+        }catch(e){}
+        window.location.href = fallback || '/match/ui';
+      }
+    </script>
+  </body>
+ </html>

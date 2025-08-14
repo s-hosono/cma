@@ -1,0 +1,281 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Company Matching Agent</title>
+    <style>
+      :root {
+        --bg:#f7f9fc; --card:#fff; --line:#e5e7eb; --accent:#2563eb; --muted:#6b7280; --text:#111827;
+        --tab:#1d4ed8; --tab-bg:#e7efff; --row-sel:#e8f0fe;
+      }
+      * { box-sizing: border-box; }
+      body { background:var(--bg); font-family: system-ui, -apple-system, Segoe UI, Meiryo, sans-serif; margin:0; }
+      header { background:#fff; border-bottom:1px solid var(--line); }
+      .topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; }
+      header h1 { font-size:18px; margin:0; color:var(--text); }
+      .tabs { display:flex; gap:18px; padding:0 18px 8px; border-top:1px solid var(--line); }
+      .tab { color:var(--muted); text-decoration:none; padding:6px 2px; border-bottom:2px solid transparent; }
+      .tab.active { color:var(--tab); border-color:var(--tab); font-weight:600; }
+      .container { max-width: 1200px; margin: 16px auto; padding: 0 16px; }
+      .page-title { font-size:20px; margin:8px 4px 12px; color:var(--text); }
+      .layout { display:grid; grid-template-columns: 220px 1fr 320px; gap:14px; }
+      .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+      h2 { font-size:16px; margin:0 0 8px; color:var(--text); }
+      .list { list-style:none; margin:0; padding:0; }
+      .list li { padding:8px 10px; border-radius:8px; cursor:pointer; }
+      .list li.active { background:var(--tab-bg); color:var(--tab); font-weight:600; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { border-bottom:1px solid var(--line); padding:8px; text-align:left; font-size:14px; }
+      tbody tr.selected { background:var(--row-sel); }
+      .search { display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+      .search input { flex:1; padding:8px; border:1px solid var(--line); border-radius:8px; }
+      .btn { display:inline-block; padding:10px 16px; border-radius:8px; background:var(--accent); color:#fff; border:0; cursor:pointer; text-decoration:none; }
+      .btn.secondary { background:#6b7280; }
+      .profile { border:1px solid var(--line); border-radius:10px; padding:10px; }
+      .muted { color:var(--muted); font-size:12px; }
+      .toolbar { display:flex; gap:8px; justify-content:flex-end; padding:12px 0; }
+      .chips { display:flex; gap:6px; flex-wrap:wrap; }
+      .chip { padding:2px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; background:#f9fafb; }
+    </style>
+  </head>
+  <body data-is-admin="{{ 'true' if is_admin else 'false' }}" data-filename="{{ features.filename if features else '' }}">
+    <header>
+      <div class="topbar">
+        <h1>Cyber Manufacturing Alliance</h1>
+        <div style="width:32px;height:32px;border-radius:50%;background:#e5e7eb"></div>
+      </div>
+      <div class="tabs">
+        <a class="tab active" href="/match/ui">Tasks</a>
+        <a class="tab" href="/companies">Companies</a>
+        <a class="tab" href="/assignments">Assignments</a>
+        <a class="tab" href="/reports">Reports</a>
+      </div>
+    </header>
+    <div class="container">
+      <div class="page-title">Company Matching Agent</div>
+  <div class="layout">
+        <div class="panel">
+          <h2>Machining Tasks</h2>
+          <ul class="list" id="taskList">
+            {% set cur = selected_key or 'drilling' %}
+            {% for key, label, cnt in tabs %}
+              <li class="{{ 'active' if cur==key else '' }}">
+                <a href="/match/ui?task={{ key }}" style="text-decoration:none;color:inherit;display:block;">
+                  {{ label }}{% if cnt %} <span class="muted">({{ cnt }})</span>{% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Manufacturing Companies</h2>
+          <div class="search">
+            <input id="search" placeholder="Search"/>
+            <button class="btn" onclick="applyFilter()" title="Filter">Filter ▾</button>
+          </div>
+          <div style="margin:6px 0; display:flex; gap:8px; align-items:center;">
+            <label class="muted" style="display:flex; gap:6px; align-items:center;">
+              <input type="checkbox" id="adminEditToggle"/>
+              Admin Edit
+            </label>
+            <button class="btn" id="openCreateBtn" style="display:none;">Add Company</button>
+            <a class="btn secondary" href="/companies" title="Open full Companies page">Open Companies Page</a>
+          </div>
+      <table id="companyTable">
+            <thead>
+        <tr><th>Company</th><th>Equipment</th><th>Capacity</th><th>Location</th><th>Notes</th><th class="admin-col" style="display:none">Actions</th></tr>
+            </thead>
+            <tbody>
+              {% for m in matches %}
+                <tr data-id="{{ m.company.id }}" onclick="onRowClick(event)" style="cursor:pointer">
+                  <td>{{ m.company.name }}</td>
+                  <td>{{ m.company.machines }}</td>
+          <td>{{ m.company.capacity or 'Medium' }}</td>
+          <td>{{ m.company.location or '-' }}</td>
+          <td class="muted" title="score {{ m.score }}">{{ m.company.notes }}</td>
+          <td class="admin-col" style="display:none">
+            <button class="btn secondary" onclick="editRowInline(event)">Edit</button>
+            <button class="btn secondary" onclick="deleteRowInline(event)" style="background:#b91c1c">Delete</button>
+          </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div id="createForm" class="panel" style="display:none; margin-top:8px;">
+            <h2 style="margin-top:0;">Add Company</h2>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+              <input id="newName" placeholder="Name"/>
+              <input id="newMachines" placeholder="Equipment"/>
+              <input id="newCapacity" placeholder="Capacity"/>
+              <input id="newLocation" placeholder="Location"/>
+              <input id="newSkills" placeholder="Skills"/>
+              <input id="newNotes" placeholder="Notes"/>
+            </div>
+            <div class="toolbar" style="justify-content:flex-start; padding:8px 0;">
+              <button class="btn" onclick="submitCreate()">Create</button>
+              <button class="btn secondary" onclick="closeCreate()">Cancel</button>
+            </div>
+          </div>
+          {% if matches and matches[0].alliance %}
+          <div class="muted" style="margin-top:8px;">
+            Alliance suggestion:
+            <span class="chips">
+              {% for c in matches[0].alliance %}<span class="chip">{{ c.name }}</span>{% endfor %}
+            </span>
+          </div>
+          {% endif %}
+        </div>
+        <div class="panel">
+          <h2>Company Profile</h2>
+          <div id="profile" class="profile">
+            <div class="muted">Select a company to view profile</div>
+          </div>
+          <h2 style="margin-top:12px;">Task Assignment</h2>
+          <select id="taskSelect" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:8px;">
+            <option value="" disabled selected>Select Task</option>
+            {% for s in steps %}
+              <option value="{{ loop.index0 }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted" style="margin-top:6px;">Assign selected task to highlighted company.</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" onclick="confirmAssignment()" title="Assign selected task to company">Confirm Assignment</button>
+        <a class="btn secondary" href="/reports" title="Go to Report page">Go to Report Page</a>
+        <a class="btn secondary" href="#" onclick="goBack('/process/ui')">Back</a>
+      </div>
+    </div>
+  <script id="companies-data" type="application/json">{{ companies_json|tojson }}</script>
+  <script id="matches-data" type="application/json">{{ matches_json|tojson }}</script>
+  <script id="selected-key" type="application/json">{{ selected_key|tojson }}</script>
+  <script id="prio-keywords" type="application/json">{{ keywords|tojson }}</script>
+    <script>
+  function goBack(fallback){ try{ if (window.history.length > 1){ window.history.back(); } else { window.location.href = fallback || '/process/ui'; } } catch(e){ window.location.href = fallback || '/process/ui'; } }
+  const companies = JSON.parse(document.getElementById('companies-data')?.textContent || '[]');
+  const matches = JSON.parse(document.getElementById('matches-data')?.textContent || '[]');
+  const selectedKey = JSON.parse(document.getElementById('selected-key')?.textContent || '"drilling"');
+  const prioKeywords = JSON.parse(document.getElementById('prio-keywords')?.textContent || '[]');
+      let selectedCompanyId = matches && matches[0] ? matches[0].company.id : null;
+      const STORAGE_KEY = 'cma:match:state';
+
+      function onRowClick(e){
+        const id = Number(e.currentTarget?.dataset?.id || 0);
+        if (id) {
+          document.querySelectorAll('#companyTable tbody tr').forEach(tr => tr.classList.remove('selected'));
+          e.currentTarget.classList.add('selected');
+          selectCompany(id);
+          saveState();
+        }
+      }
+      function selectCompany(id){
+        selectedCompanyId = id;
+        const c = companies.find(x => x.id === id);
+        const el = document.getElementById('profile');
+        if (!c) { el.innerHTML = '<div class="muted">Not found</div>'; return; }
+        el.innerHTML = `
+          <div style="font-weight:700; font-size:16px; margin-bottom:6px;">${c.name}</div>
+          <div class="muted">Equipment</div>
+          <div style="margin-bottom:6px;">${c.machines || '-'}</div>
+          <div class="muted">Capacity</div>
+          <div style="margin-bottom:6px;">Medium</div>
+          <div class="muted">Notes</div>
+          <div>${c.notes || '-'}</div>
+        `;
+      }
+      function applyFilter(){
+        const q = (document.getElementById('search').value || '').toLowerCase();
+        const tbody = document.querySelector('#companyTable tbody');
+        tbody.querySelectorAll('tr').forEach(tr => { tr.style.display = ''; });
+        if (!q) return;
+        tbody.querySelectorAll('tr').forEach(tr => {
+          const t = tr.innerText.toLowerCase();
+          if (!t.includes(q)) tr.style.display = 'none';
+        });
+        saveState();
+      }
+      function confirmAssignment(){
+        const idx = document.getElementById('taskSelect').value;
+        if (idx === '' || selectedCompanyId == null) { alert('Select task and company.'); return; }
+        const taskName = document.getElementById('taskSelect').options[idx ? Number(idx)+1 : 0]?.text || 'Task';
+        const drawingFile = (document.body?.dataset?.filename || '');
+        fetch('/assignments/save', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ task: taskName, company_id: selectedCompanyId, drawing_file: drawingFile })
+        }).then(r=>r.json()).then(j=>{
+          if (j.ok) alert('Assignment saved: #'+j.id);
+          else alert('Save failed: '+(j.error||''));
+        }).catch(err=>alert('Save error: '+err.message));
+      }
+      // init
+      // 保存/復元
+      function saveState(){
+        try{
+          const q = document.getElementById('search').value || '';
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ selectedCompanyId, q, selectedKey }));
+        }catch(e){}
+      }
+      (function restore(){
+        try{
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) throw 0;
+          const st = JSON.parse(raw);
+          if (st && st.q){ document.getElementById('search').value = st.q; applyFilter(); }
+          if (st && st.selectedCompanyId){
+            selectedCompanyId = st.selectedCompanyId;
+            const row = document.querySelector(`#companyTable tbody tr[data-id="${selectedCompanyId}"]`);
+            if (row){ row.classList.add('selected'); selectCompany(selectedCompanyId); }
+          }
+        }catch(e){
+          const firstRow = document.querySelector('#companyTable tbody tr');
+          if (firstRow) { firstRow.classList.add('selected'); }
+          if (selectedCompanyId) selectCompany(selectedCompanyId);
+        }
+      })();
+
+  // --- Admin inline edit helpers (require login) ---
+  const isAdmin = (document.body?.dataset?.isAdmin === 'true');
+  function setAdminMode(on){
+    document.querySelectorAll('.admin-col').forEach(td => td.style.display = on ? '' : 'none');
+    document.getElementById('openCreateBtn').style.display = on ? '' : 'none';
+  }
+  function editRowInline(ev){ ev.stopPropagation(); const tr = ev.target.closest('tr'); if (!tr) return; const tds = tr.querySelectorAll('td');
+    // [name, machines, capacity, location, notes]
+    ['text','text','text','text','text'].forEach((_,i)=>{ const td = tds[i]; const val = td.textContent; td.innerHTML = `<input value="${val.replace(/"/g,'&quot;')}"/>`; });
+    ev.target.textContent = 'Save'; ev.target.onclick = saveRowInline; }
+  async function saveRowInline(ev){ ev.stopPropagation(); const tr = ev.target.closest('tr'); const id = Number(tr.dataset.id);
+    const [name,machines,capacity,location,notes] = Array.from(tr.querySelectorAll('td input')).map(i=>i.value.trim());
+    const res = await fetch(`/api/companies/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, machines, capacity, location, notes }) });
+    const j = await res.json(); if (!j.ok){ alert('Update failed'); return; }
+    const data = [name,machines,capacity||'Medium',location||'-',notes];
+    Array.from(tr.querySelectorAll('td')).slice(0,5).forEach((td,i)=> td.textContent = data[i] || '');
+    ev.target.textContent = 'Edit'; ev.target.onclick = editRowInline; }
+  async function deleteRowInline(ev){ ev.stopPropagation(); if(!confirm('Delete this company?')) return; const tr = ev.target.closest('tr'); const id = Number(tr.dataset.id);
+    const res = await fetch(`/api/companies/${id}`, { method:'DELETE' }); const j = await res.json(); if (!j.ok){ alert('Delete failed'); return; }
+    tr.remove(); }
+  function openCreate(){ document.getElementById('createForm').style.display=''; }
+  function closeCreate(){ document.getElementById('createForm').style.display='none'; }
+  async function submitCreate(){
+    const payload = {
+      name: document.getElementById('newName').value,
+      machines: document.getElementById('newMachines').value,
+      capacity: document.getElementById('newCapacity').value,
+      location: document.getElementById('newLocation').value,
+      skills: document.getElementById('newSkills').value,
+      notes: document.getElementById('newNotes').value,
+    };
+    const res = await fetch('/api/companies', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const j = await res.json(); if (!j.ok){ alert('Create failed: '+(j.error||'')); return; }
+    window.location.reload();
+  }
+  // init admin toggle
+  (function initAdmin(){ const chk = document.getElementById('adminEditToggle');
+    if (!isAdmin){ chk.disabled = true; setAdminMode(false); return; }
+    chk.addEventListener('change', ()=> setAdminMode(chk.checked)); setAdminMode(chk.checked);
+    document.getElementById('openCreateBtn').addEventListener('click', openCreate);
+  })();
+
+  // server-side prioritization is applied; client keeps selection + search only
+    </script>
+  </body>
+</html>
