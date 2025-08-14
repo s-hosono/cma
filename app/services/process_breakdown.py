@@ -15,9 +15,13 @@ def breakdown_process(features) -> List[ProcessStep]:
     steps: List[ProcessStep] = []
     # LLM提案（あれば採用）
     if llm.is_configured():
+        schema = (
+            '{"name": "string", "machine": "string", "minutes": "integer", '
+            '"tolerance": "string(optional)", "precision": "string(optional)"}'
+        )
         prompt = f"""
 あなたは工程設計の専門家です。以下の条件で3〜5工程の推奨工程のみをJSON配列で厳密に出力してください。説明文や前置きは禁止。
-各要素スキーマ: {"name": "string", "machine": "string", "minutes": "integer", "tolerance": "string(optional)", "precision": "string(optional)"}
+各要素スキーマ: {schema}
 前提: 材質={features.material}, 種別={features.part_type}
         """
         js = llm.chat_json(
